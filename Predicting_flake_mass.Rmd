@@ -1,0 +1,456 @@
+---
+title: 'Predicting Flake Mass: A View from Machine Learning. Lithic Technology'
+author: "Guillermo Bustos-Pérez"
+date: "13/3/2021"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Please cite as:  
+Bustos-Pérez, G., Baena, J., 2021. Predicting Flake Mass: A View from Machine Learning. Lithic Technology 14. https://doi.org/10.1080/01977261.2021.1881267   
+
+
+## Table of contents   
+
+1) Load packages, read and check data   
+
+2) Descriptive statistics of experimental assemblage   
+  2.1) Descriptive statistics   
+  2.2) Bagolini scatter plot    
+  2.3) Calculation of new variables   
+  
+3) Multiple linear regression and best subset selection    
+  3.1) Best subset selection   
+  3.2) Number of variables   
+  3.3) Variable selection    
+
+4) Evaluation of multiple linear regression model    
+  4.1) Evaluation metrics    
+  4.2) Visual evaluation of model  
+
+5) References   
+
+## 1) Load packages, read and check data    
+
+The data is available in this repository as a **.csv** file. Please note that original data uses **","** as decimal marker instead of using **"."**. Thus, it is required to use the function **read_csv2**. Data manipulation and visualization are performed using package **tidyverse** (Wickham et al., 2019).   
+
+```{r}
+# Load packages  
+library(tidyverse)
+```
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(kableExtra)
+```
+
+```{r}
+# Read in data
+Reg_Data <- read.csv2("Data.csv")
+```
+
+Please note that here the function **kable()** from package **kableExtra** is being employed to visualize imported data. Function **head()** can also be employed.
+
+```{r echo=FALSE}
+# Instead of head
+kable(Reg_Data[1:5,],
+      col.names = gsub("[_]", " ", names(Reg_Data)))
+```
+```{r}
+# Get column names
+colnames(Reg_Data)
+```
+## 2) Descriptive statistics of experimental assemblage   
+
+The sample consisted of 300 freehand experimental flint flakes knapped using a hard hammer. Flakes belonged to nearly 20 knapping sequences wherein a wide variety of knapping methods were employed – hierarchical (Levallois and hierarchical discoid), bifacial (discoid), and unipolar – to generate the experimental sample, ensuring a wide range of morphologies. All selected flakes from the knapping sequences were complete, and all presented feather terminations. Since a key aspect of the experimentation was to estimate flake mass and independently of exterior factors, hammerstones included a wide selection of limestone, sandstone, and quartzite pebbles, allowing for a diverse range of morphologies and potential active percussion areas.
+
+
+### 2.1) Descriptive statistics   
+
+Summary statistics of the experimental assemblage. Note that **"Platform size1"** refers to platform size measured following Muller and Clarkson (2016); while **"Platform size2"** refers to measures following Andrefsky (2005).
+
+```{r}
+# Make data frame of descriptive statistics of assemblage
+Summary_Assem <- data.frame(
+    rbind(
+      data.frame(data.matrix(summary(Reg_Data$Length))) %>% t(),
+      data.frame(data.matrix(summary(Reg_Data$Width))) %>% t(),
+      data.frame(data.matrix(summary(Reg_Data$Mean_Thick))) %>% t(),
+      data.frame(data.matrix(summary(Reg_Data$Surf_Plat))) %>% t(),
+      data.frame(data.matrix(summary(Reg_Data$Surf_Plat_II))) %>% t(),
+      data.frame(data.matrix(summary(Reg_Data$Weight))) %>% t()
+      ))
+
+# Place column names for each measure
+Measure <- c("Length", "Width", "Mean Thickness", "Platform Surface1",
+             "Platform Surface2", "Weight")
+
+Summary_Assem <- cbind(Measure, Summary_Assem)
+
+rownames(Summary_Assem) <- 1:nrow(Summary_Assem)
+```
+```{r echo=FALSE}
+# Instead of head
+kable(Summary_Assem)
+```
+   
+\ 
+
+### 2.2) Bagolini scatter plot   
+
+A Bagolini (1968) scatter plot can be a helpful way to visualize the data. 
+
+```{r}
+# Bagolini scatter plot
+Reg_Data %>% 
+  ggplot(aes(Width, Length)) +
+  geom_segment(x = 40, y = 0, xend = 0, yend = 40, color = "gray48") +
+  geom_segment(x = 60, y = 0, xend = 0, yend = 60, color = "gray48") +
+  geom_segment(x = 80, y = 0, xend = 0, yend = 80, color = "gray48") +
+  
+  geom_segment(x = 0, y = 0, xend = 90, yend = 90, color = "gray48") +
+  
+  geom_segment(x = 0, y = 0, xend = (90/6), yend = 90, color = "gray48") +
+  geom_segment(x = 0, y = 0, xend = (90/3), yend = 90, color = "gray48") +
+  geom_segment(x = 0, y = 0, xend = (90/2), yend = 90, color = "gray48") +
+  geom_segment(x = 0, y = 0, xend = (90/1.5), yend = 90, color = "gray48") +
+  geom_segment(x = 0, y = 0, xend = (90/0.75), yend = 90, color = "gray48") +
+  geom_segment(x = 0, y = 0, xend = (90/0.5), yend = 90, color = "gray48") +
+  geom_segment(x = 0, y = 0, xend = 90, yend = (90/2), color = "gray48") +
+  
+  annotate("text", x = 0, y = 89, adj = 0, 
+           label = "Very thin blade", size = 2.5) +
+  annotate("text", x = 17, y = 89, adj = 0, 
+           label = "Thin blade", size = 2.5) +
+  annotate("text", x = 33, y = 89, adj = 0, 
+           label = "Blade", size = 2.5) +
+  annotate("text", x = 44, y = 89, adj = 0, 
+           label = "Elongated flake", size = 2.5) +
+  annotate("text", x = 72, y = 89, adj = 0, 
+           label = "Flake", size = 2.5) +
+  annotate("text", x = 88, y = 80, adj = 0, 
+           label = "Wide\nflake", size = 2.5) +
+  annotate("text", x = 88, y = 53, adj = 0, 
+           label = "Very\nwide\nflake", size = 2.5) +
+  annotate("text", x = 88, y = 25, adj = 0, 
+           label = "Wider\nflake", size = 2.5) +
+  
+  annotate("text", x = 20, y = 1, adj = 0, 
+           label = "Micro", size = 2.5) +
+  annotate("text", x = 47, y = 1, adj = 0, 
+           label = "Small", size = 2.5) +
+  annotate("text", x = 65, y = 1, adj = 0, 
+           label = "Normal", size = 2.5) +
+  annotate("text", x = 85, y = 1, adj = 0, 
+           label = "Big", size = 2.5) +
+  
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = seq(0, 90, 5), lim = c(0, 90)) +
+  scale_y_continuous(breaks = seq(0, 90, 5), lim = c(0, 90)) +
+  ylab("Length (mm)") +
+  xlab("Width (mm)") +
+  theme_light() +
+  labs(color = "") +
+  theme(axis.title = element_text(size = 9, color = "black", face = "bold"),
+        axis.text = element_text(size = 8, color = "black"),
+        legend.position = "bottom") +
+  coord_fixed() 
+
+```
+    
+
+### 2.3) Calculation of new variables    
+
+Previous studies have shown that it is easier to predict log of flake mass using log of platform size (Braun et al., 2008; Clarkson & Hiscock, 2011; Shott et al., 2000). Following this line of approach, logarithmic transformations of all variables were included in the dataset, and the target variable was the logarithmic transformation of flake weight. In the present study, all logarithmic transformations refer to the common logarithm (base 10).  
+Log transformations of variables are common, since they avoid negative results (necessary in the case of predicting flake weight), reduce skewed distributions, and can approximate parametric distributions (which favors the inferential power of models).   
+
+Log10 transformation of variables and original variables are placed into a new data frame. Variables of length and width are removed since they would be altered by retouch.  
+
+```{r}
+# Calculate log10 transformations of variables and 
+# place into new dataset
+Reg_Data_2 <- Reg_Data %>% 
+  mutate(Log_Weight = log10(Weight),
+         Log_Max_Thick = log10(Max_Thick),
+         Log_Thick = log10(Mean_Thick),
+         Log_SD_Thick = log10(SD_Thick),
+         Log_Plat = log10(Surf_Plat),
+         Log_Plat_2 = log10(Surf_Plat_II),
+         Log_Plat_De = log10(Plat_Depth),
+         Log_EPA = log10(EPA),
+         Log_IPA = log10(IPA)) %>% 
+  select(-c(Length, Width, Weight,
+            Surf_Plat, Surf_Plat_II))
+```
+
+
+## 3) Multiple linear regression and best subset selection    
+
+Best subset selection of variables (Furnival & Wilson, 1974; Hastie et al., 2009; Hocking & Leslie, 1967) fits separate regression models for each of the possible combination of variables, the total number of models being equal to $2^p$ (p being the number of predictors)
+
+```{r}
+# number of models fitted
+2^(ncol(Reg_Data_2)-1)
+```
+
+### 3.1) Best subset selection   
+
+Best subset selection is performed using the package **“leaps”** (Lumley based on Fortran code by Alan Miller, 2020), “caret” (Kuhn, 2008), and “broom” (Robinson, 2014).
+
+```{r}
+# Load package
+library(leaps)
+
+# Perform best subset
+regfit_full <- regsubsets(Log_Weight ~., 
+                          data = Reg_Data_2,
+                          nvmax = 18)
+reg_summary <- summary(regfit_full)
+```
+
+### 3.2 Number of variables   
+
+Selection of number of variables is evaluated using two parameters: Mallows’s Cp and adjusted $r^2$.  
+Mallows’s Cp (Mallows, 1973) accounts for model fit in the process of model selection – a low value indicates a good model.  
+The addition of predictors results in an increasing $r^2$ (proportion of variance of the predicted variable explained by the independent variables) irrespective of predictor contribution to the model and making it impossible to compare models with a different number of predictors. Adjusted $r^2$ is analogous to the linear regression $r^2$ but adjusted to the number of explanatory variables, thus making model comparison possible.   
+
+```{r, fig.width=9, fig.height=4}
+# Plot cp and adjusted rsquared according to n predictors
+data.frame(reg_summary[4], 
+           reg_summary[5],
+           Predictors  = seq(1, 18, 1)) %>% 
+  pivot_longer(c(adjr2, cp),
+               names_to = "Parameters",
+               values_to = "Estimation") %>% 
+  ggplot(aes(Predictors, Estimation, color = Parameters)) +
+    scale_x_continuous(breaks = seq(0, 18, 2), lim = c(1, 18)) +
+  geom_line() +
+  geom_point() +
+  ggsci::scale_color_aaas() +
+  theme_light() +
+  facet_wrap(~Parameters, scales = "free") +
+  theme(legend.position = "none")
+```
+   
+Therefore, combined data from adjusted $r^2$ and $C_p$ indicate that (given the employed variables) the optimal model should have between six and eight explanatory variables.
+
+
+### 3.3 Variable selection   
+
+Evaluation of predictor selection and stability following the calculation of Cp and adjusted r2 values allows for refinement of the model (Figure 3).
+
+```{r, fig.width=14, fig.height=7}
+# Get variable stability using adjusted r2 and Cp ####
+par(mfrow  = c(1,2))
+plot(regfit_full, scale = "adjr2")
+plot(regfit_full, scale = "Cp")
+```
+
+Function to get best variables: 
+
+```{r}
+# Function to get formula
+
+get_model_formula <- function(id, object, outcome){
+  # get models data
+  models <- summary(object)$which[id,-1]
+  # Get outcome variable
+  #form <- as.formula(object$call[[2]])
+  #outcome <- all.vars(form)[1]
+  # Get model predictors
+  predictors <- names(which(models == TRUE))
+  predictors <- paste(predictors, collapse = "+")
+  # Build model formula
+  as.formula(paste0(outcome, "~", predictors))
+}
+
+# Get best variables
+get_model_formula(7, regfit_full, "Log_Weight")
+```
+Variables selected as predictors are: mean thickness of flake; cortex quantity; number of scars; EPA; log of maximum thickness; log of platform size (Muller & Clarkson, 2016); and log of platform depth. Log transformation of maximum thickness is the most commonly selected and stable variable, followed by quantity of cortex and number of scars.  
+
+
+## 4) Evaluation of multiple linear regression model   
+
+Evaluation of a regression model can be differentiated into two related parts: metrics and visual analisys.   
+
+```{r}
+# This comes in handy 
+frmla <- "Log_Weight ~ Mean_Thick + Cortex + No_Scars + EPA + Log_Max_Thick + Log_Plat + Log_Plat_De"
+```
+
+### 4.1) Evaluation metrics   
+
+First a k-fold cross validation is performed. Although linear models are less prone to overfit it is still of good practice to perform validations on test sets.   
+
+The use of function **summary()** allows to access details of estimates for predictor coefficient, residual distribution and adjusted $r^2$. 
+
+```{r}
+# Load libraries
+library(lattice); library(caret)
+```
+```{r}
+### Perform K-Fold cross validation
+# Set train control
+train.control <- trainControl(method = "repeatedcv", 
+                              number = 10, repeats = 50)
+
+# Set seed 
+set.seed(123)
+
+# Train the model with caret
+model <- train(Log_Weight ~ Mean_Thick + Cortex + No_Scars + EPA + Log_Max_Thick + Log_Plat + Log_Plat_De, 
+               data = Reg_Data_2, 
+               method = "lm",
+               trControl = train.control)
+```
+```{r}
+# Summary the results
+summary(model)
+```
+
+
+Now we can calculate additional metrics to evaluate the performance of the model. **A good model will have a RMSE lower than the standard deviation of the target variable**. This is indicative of the model estimating better than taking the average value of the target variable. 
+
+```{r}
+# Get metrics of model
+model$results
+
+# Get standard deviation of target variable
+sd(Reg_Data_2$Log_Weight)
+```
+
+### 4.2) Visual evaluation of model    
+
+We can use the function **augment()** from package **broom** (Robinson, 2014) to easily access predicted values, true values, residuals and original variables. Note that function augment() does not accept a caret object. This makes it necessary to train the model using **lm()**. Resulting estimates and coefficients are similar (when not identical) to the ones from the cross validation.
+
+```{r}
+# Train linear model
+set.seed(123)
+lm_model <- lm(frmla, Reg_Data_2)
+
+# Check coefficients
+summary(lm_model)
+
+# Get residuals, predicted values, etc.
+Model_and_Fitted <- broom::augment(lm_model)
+```
+
+Visualization of plots for the evaluation of regression models is of key importance.  
+
+  * Plot of predicted and actual values: a good model will have a resgression line with points distributed evenly and continous without systematic errors.  
+  * Plot of actual value and residuals: a good model will have most of the residuals evenly distributed among the 0 value. Positive residuals indicate underestimations of flake mass, and negative residuals indicate overestimations of flake mass.   
+
+```{r, fig.height=4}
+# Regression and residuals scatter plot
+ggpubr::ggarrange(
+  (Model_and_Fitted %>% ggplot(aes(.fitted, Log_Weight)) +
+  geom_point(alpha = 0.5, size = 2) +
+  geom_line(aes(y = .fitted), size = 1, col = "blue") +
+  scale_y_continuous(breaks = seq(-0.2, 2, 0.5), lim = c(-0.35, 2)) + 
+  scale_x_continuous(breaks = seq(-0.2, 2, 0.5), lim = c(-0.35, 2)) +
+  ylab("Log of flake mass") +
+  xlab("Predicted log of flake mass") +
+  theme_light() +
+  theme(
+    axis.title = element_text(color = "black", size = 9, face = "bold"),
+    axis.text = element_text(color = "black", size = 8.5))
+  ),
+  (Model_and_Fitted %>% 
+  ggplot(aes(Log_Weight, .resid)) +
+  geom_point(alpha = 0.5, size = 2) +
+  ylab("Residuals") +
+  xlab("Log of flake mass") +
+  scale_y_continuous(breaks = seq(-0.7, 0.7, 0.20), lim = c(-0.7, 0.7)) +
+  geom_hline(yintercept = 0, linetype="dashed") +
+  theme_light() +
+  theme(
+    axis.title = element_text(color = "black", size = 9, face = "bold"),
+    axis.text = element_text(color = "black", size = 8.5)
+  )),
+  ncol = 2, align = "h")
+```
+
+Evaluation of the residuals plot shows possible systematic errors when log of flake mass is below 0.25, with predictions constantly overestimating real log flake mass values. However, this can also be attributed to the limited data for that range.  
+Residuals for flakes with a log value of flake mass above 1.5 also seem to present systematic underestimations of flake mass. Residuals from flakes with a log value of flake mass between 0.25 and 1.5 present a homogeneous distribution.  
+
+A **density plot of residuals** provides an additional evaluation of the model. Ideal residuals will have an average  value of 0 and will have a **gaussian distribution**.  
+
+```{r, fig.height=3.5}
+# Density plot of residuals
+Model_and_Fitted %>% 
+  ggplot(aes(.resid)) +
+  geom_density(color = "blue") +
+  ylab("Density") +
+  xlab("Residuals") +
+  geom_vline(xintercept = 0, linetype="dashed") +
+  geom_hline(yintercept = 0) +
+  theme_light() +
+  theme(
+    axis.title = element_text(color = "black", size = 9, face = "bold"),
+    axis.text = element_text(color = "black", size = 8.5)
+  )
+```
+
+
+Error rate (Davis and Shea, 1998) can be calculated and plotted to further evaluate the model. 
+
+```{r, fig.height=3.5}
+# Calculate and plot error rate
+Model_and_Fitted %>% transmute(
+  Error_Rate = ((.fitted - Log_Weight)/Log_Weight)*100) %>% 
+  ggplot(
+  aes(Error_Rate)) +
+  geom_density(color = "red") +
+  theme_light() +
+  ylab("Density") +
+  xlab("Error rate (%)") +
+  theme(
+    axis.title = element_text(color = "black", size = 9, face = "bold"),
+    axis.text = element_text(color = "black", size = 8.5)
+  )
+```
+
+Summary statistics of error rate can easily be accessed. 
+
+```{r}
+# Summary statistics of error rate
+summary(Model_and_Fitted %>% 
+          transmute(
+            Error_Rate = ((.fitted - Log_Weight)/Log_Weight)*100)
+        )
+```
+
+
+## 5) References   
+
+Andrefsky, W., 2005. Lithics Macroscopic Approaches to Analysis, Second. ed, Cambridge Manuals in Archaeology. Cambridge University Press, Cambridge.  
+
+Bagolini, B., 1968. Ricerche sulle dimensioni dei manufatti litici preistorici non ritoccati. Annali dell’Università di Ferrara : nuova serie, Sezione XV. Paleontologia Umana e Paletnologia 1, 195–219.  
+
+Braun, D.R., Rogers, M.J., Harris, J.W.K., Walker, S.J., 2008. Landscape-scale variation in hominin tool use: Evidence from the Developed Oldowan. Journal of Human Evolution 55, 1053–1063. https://doi.org/10.1016/j.jhevol.2008.05.020   
+
+Clarkson, C., Hiscock, P., 2011. Estimating original flake mass from 3D scans of platform area. Journal of Archaeological Science 38, 1062–1068. https://doi.org/10.1016/j.jas.2010.12.001   
+
+Davis, Z.J., Shea, J.J., 1998. Quantifying Lithic Curation: An Experimental Test of Dibble and Pelcin’s Original Flake-Tool Mass Predictor. Journal of Archaeological Science 25, 603–610. https://doi.org/10.1006/jasc.1997.0255   
+
+Furnival, G.M., Wilson, R.W., 1974. Regressions by Leaps and Bounds. Technometrics 16, 499–511.   
+
+Hastie, T., Tibshirani, R., Friedman, J., 2009. The Elements of Statistical Learning. Data Mining, Inference, and Prediction, Second Edition. ed, Springer Series in Statistics. Springer.   
+
+Hocking, R.R., Leslie, R.N., 1967. Selection of the Best Subset in Regression Analysis. Technometrics 9, 531–540.   
+
+Kuhn, M., 2008. Building Predictive Models in R using the caret Package. Journal of Statistical Software 28. https://doi.org/10.18637/jss.v028.i05   
+
+Lumley based on Fortran code by Alan Miller, T., 2020. leaps: Regression Subset Selection.   
+
+Mallows, C.L., 1973. Some Comments on Cp. Technometrics 15, 661–675.   
+
+Muller, A., Clarkson, C., 2016. A new method for accurately and precisely measuring flake platform area. Journal of Archaeological Science: Reports 8, 178–186. https://doi.org/10.1016/j.jasrep.2016.06.015   
+
+Robinson, D., 2014. broom: An R Package for Converting Statistical Analysis Objects Into Tidy Data Frames. arXiv: Computation. https://doi.org/arXiv:1412.3565   
+
+Shott, M.J., Bradbury, A.P., Carr, P.J., Odell, G.H., 2000. Flake Size from Platform Attributes: Predictive and Empirical Approaches. Journal of Archaeological Science 27, 877–894. https://doi.org/10.1006/jasc.1999.0499   
+
+Wickham, H., Averick, M., Bryan, J., Chang, W., McGowan, L., François, R., Grolemund, G., Hayes, A., Henry, L., Hester, J., Kuhn, M., Pedersen, T., Miller, E., Bache, S., Müller, K., Ooms, J., Robinson, D., Seidel, D., Spinu, V., Takahashi, K., Vaughan, D., Wilke, C., Woo, K., Yutani, H., 2019. Welcome to the Tidyverse. Journal of Open Source Software 4, 1686. https://doi.org/10.21105/joss.01686    
